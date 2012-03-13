@@ -1,4 +1,4 @@
-from twisted.web.resource import Resource
+from twisted.web.resource import Resource, getChildForRequest, IResource
 from twisted.web.iweb import IRenderable
 from twisted.web.template import flattenString
 from twisted.web import server
@@ -80,7 +80,8 @@ class KleinResource(object, Resource):
         # percolate up, which we can catch and render directly in order to
         # save ourselves some legwork.
         try:
-            endpoint, kwargs = mapper.match()
+            (rule, kwargs) = mapper.match(return_rule=True)
+            endpoint = rule.endpoint
         except HTTPException as he:
             request.setResponseCode(he.code)
             return he.get_body({})
@@ -92,6 +93,15 @@ class KleinResource(object, Resource):
         # the incremental renderer.
         d = defer.maybeDeferred(meth, self, request, **kwargs)
         def process(r):
+            if IResource.providedBy(r):
+                for segment in str(rule).split('/'):
+                    if segment.startswith('<path:'):
+                        break
+                    elif segment == request.postpath[0]:
+                        request.prepath.append(request.postpath.pop(0))
+
+                return request.render(getChildForRequest(r, request))
+
             if IRenderable.providedBy(r):
                 return flattenString(request, r).addCallback(process)
 
@@ -99,6 +109,7 @@ class KleinResource(object, Resource):
                 request.write(r)
                 request.finish()
             return r
+
         d.addCallback(process)
         d.addErrback(request.processingFailed)
         return server.NOT_DONE_YET

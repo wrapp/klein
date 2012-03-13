@@ -5,7 +5,7 @@ from klein.resource import KleinResource
 
 from twisted.internet.defer import succeed, Deferred
 from twisted.web import server
-
+from twisted.web.resource import Resource
 from twisted.web.template import Element, XMLString, renderer
 
 from mock import Mock
@@ -23,11 +23,20 @@ def requestMock(path, method="GET", host="localhost", port=8080, isSecure=False)
     request.notifyFinish.return_value = Deferred()
     request.finished = False
 
+    def render(resource):
+        return _render(resource, request)
+
     def finish():
         request.notifyFinish.return_value.callback(None)
         request.finished = True
 
+    def processingFailed(failure):
+        request.failed = failure
+        request.notifyFinish.return_value.errback(failure)
+
     request.finish.side_effect = finish
+    request.render.side_effect = render
+    request.processingFailed.side_effect = processingFailed
 
     return request
 
@@ -79,12 +88,47 @@ class SimpleKlein(KleinResource):
     def element(self, request, name):
         return SimpleElement(name)
 
+    @expose("/resource/leaf")
+    def resource(self, request):
+        return LeafResource()
+
+    @expose("/resource/children")
+    def resource_children_index(self, request):
+        return ChildrenResource()
+
+    @expose("/resource/children/<path:rest>")
+    def resource_children(self, request, rest):
+        return ChildrenResource()
+
 
 class ChildOfKlein(SimpleKlein):
-
     @expose("/")
     def index(self, request):
         return "child"
+
+
+class LeafResource(Resource):
+    isLeaf = True
+
+    def render(self, request):
+        return "I am a leaf in the wind."
+
+
+class ChildResource(Resource):
+    isLeaf = True
+    def __init__(self, name):
+        self._name = name
+
+    def render(self, request):
+        return "I'm a child named %s!" % (self._name,)
+
+
+class ChildrenResource(Resource):
+    def render(self, request):
+        return "I have children!"
+
+    def getChild(self, path, request):
+        return ChildResource(path)
 
 
 class KleinResourceTests(unittest.TestCase):
@@ -152,6 +196,42 @@ class KleinResourceTests(unittest.TestCase):
 
         def _cb(result):
             request.write.assert_called_with("<h1>foo</h1>")
+
+        d.addCallback(_cb)
+
+        return d
+
+    def test_leafResourceRendering(self):
+        kr = SimpleKlein()
+        request = requestMock("/resource/leaf")
+
+        d = _render(kr, request)
+        def _cb(result):
+            request.write.assert_called_with("I am a leaf in the wind.")
+
+        d.addCallback(_cb)
+
+        return d
+
+    def test_childResourceRendering(self):
+        kr = SimpleKlein()
+        request = requestMock("/resource/children/betty")
+
+        d = _render(kr, request)
+        def _cb(result):
+            request.write.assert_called_with("I'm a child named betty!")
+
+        d.addCallback(_cb)
+
+        return d
+
+    def test_childrenResourceRendering(self):
+        kr = SimpleKlein()
+        request = requestMock("/resource/children")
+
+        d = _render(kr, request)
+        def _cb(result):
+            request.write.assert_called_with("I have children!")
 
         d.addCallback(_cb)
 
