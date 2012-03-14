@@ -233,3 +233,18 @@ class KleinResourceTests(unittest.TestCase):
         d.addCallback(_cb)
 
         return d
+
+    def test_notFound(self):
+        kr = SimpleKlein()
+
+        request = requestMock("/fourohofour")
+
+        d = _render(kr, request)
+
+        def _cb(result):
+            request.setResponseCode.assert_called_with(404)
+            self.assertIn("404 Not Found",
+                request.write.mock_calls[0][1][0])
+
+        d.addCallback(_cb)
+        return d
