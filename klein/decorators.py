@@ -35,7 +35,7 @@ def expose_branch(baseurl, *a, **kw):
     """
     Mark a ``KleinResource`` method as exposing a branch at the given URL.
     A branch is a URL which may have children to an arbitrary depth and should
-    match both /url/ and /url/<path:rest>.
+    match both ``/url/``` and ``/url/<path:rest>``.
     """
 
     if not baseurl.endswith('/'):

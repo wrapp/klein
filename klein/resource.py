@@ -44,7 +44,7 @@ class _KleinMetaclass(type):
 
 class KleinResource(object, Resource):
     """
-    A ``Resource`` that can do URL routing.
+    An ``IResource`` that can do URL routing.
     """
 
     __metaclass__ = _KleinMetaclass
