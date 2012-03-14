@@ -34,14 +34,12 @@ class _KleinMetaclass(type):
         endpoints = self.endpoints = inherited_endpoints
         self.__klein_params__ = routes, endpoints
         for value in attrs.itervalues():
-            akw = getattr(value, '__klein_exposed__', None)
-            if akw is None:
-                continue
+            akws = getattr(value, '__klein_exposed__', [])
 
-            url, a, kw = akw
-            rule = routing.Rule(url, *a, **kw)
-            endpoints[kw['endpoint']] = value
-            routes.add(rule)
+            for (url, a, kw) in akws:
+                rule = routing.Rule(url, *a, **kw)
+                endpoints[kw['endpoint']] = value
+                routes.add(rule)
 
 
 class KleinResource(object, Resource):
@@ -94,11 +92,9 @@ class KleinResource(object, Resource):
         d = defer.maybeDeferred(meth, self, request, **kwargs)
         def process(r):
             if IResource.providedBy(r):
-                for segment in str(rule).split('/'):
-                    if segment.startswith('<path:'):
-                        break
-                    elif segment == request.postpath[0]:
-                        request.prepath.append(request.postpath.pop(0))
+                branch_segments = request.__klein_branch_segments__
+                while request.postpath and request.postpath != branch_segments:
+                    request.prepath.append(request.postpath.pop(0))
 
                 return request.render(getChildForRequest(r, request))
 

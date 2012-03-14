@@ -1,6 +1,6 @@
 from twisted.trial import unittest
 
-from klein.decorators import expose
+from klein.decorators import expose, expose_branch
 from klein.resource import KleinResource
 
 from twisted.internet.defer import succeed, Deferred
@@ -22,6 +22,7 @@ def requestMock(path, method="GET", host="localhost", port=8080, isSecure=False)
     request.isSecure.return_value = isSecure
     request.notifyFinish.return_value = Deferred()
     request.finished = False
+    request.__klein_branch_segments__ = []
 
     def render(resource):
         return _render(resource, request)
@@ -92,12 +93,8 @@ class SimpleKlein(KleinResource):
     def resource(self, request):
         return LeafResource()
 
-    @expose("/resource/children")
-    def resource_children_index(self, request):
-        return ChildrenResource()
-
-    @expose("/resource/children/<path:rest>")
-    def resource_children(self, request, rest):
+    @expose_branch("/resource/children")
+    def resource_children(self, request):
         return ChildrenResource()
 
 
@@ -227,7 +224,7 @@ class KleinResourceTests(unittest.TestCase):
 
     def test_childrenResourceRendering(self):
         kr = SimpleKlein()
-        request = requestMock("/resource/children")
+        request = requestMock("/resource/children/")
 
         d = _render(kr, request)
         def _cb(result):
