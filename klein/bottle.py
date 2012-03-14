@@ -1,5 +1,8 @@
+import sys
+
 from functools import wraps
 
+from twisted.python.log import startLogging
 from twisted.internet import reactor
 from twisted.web.server import Site
 
@@ -24,6 +27,7 @@ def run(host=None, port=8080, reactor=reactor,
     # Invoke the metaclass directly.
     runner = type(KleinResource)("runner", (KleinResource,), routes)
     site = site_factory(runner())
+    startLogging(sys.stdout)
     reactor.listenTCP(port, site, interface=host)
     reactor.run()
 
