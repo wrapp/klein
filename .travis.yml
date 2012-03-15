@@ -3,7 +3,9 @@ python:
     - 2.6
     - 2.7
 
-install: python setup.py install
+install:
+    - python setup.py install
+    - pip install sphinx --use-mirrors
 script:
     - trial klein
     - cd docs; make html
