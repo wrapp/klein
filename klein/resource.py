@@ -3,6 +3,7 @@ from twisted.web.iweb import IRenderable
 from twisted.web.template import flattenString
 from twisted.web import server
 from twisted.internet import defer
+from twisted.python.failure import Failure
 
 from werkzeug.exceptions import HTTPException
 
@@ -11,19 +12,46 @@ from klein.interfaces import IKleinRequest
 __all__ = ["KleinResource"]
 
 
+
+def routingFailed(failure, request):
+    request.setResponseCode(failure.value.code)
+    return failure.value.get_body({})
+
+def processingFailed(failure, request):
+    request.processingFailed(failure)
+
+def noOp(*args, **kwargs):
+    pass
+
+
 class KleinResource(Resource):
     """
     A ``Resource`` that can do URL routing.
     """
     isLeaf = True
 
+    acceptedCallbacks = {
+        'requestStarted': noOp,
+        'requestCompleted': noOp,
+        'requestFailed': noOp,
+        'routingCompleted': noOp,
+        'routingFailed': routingFailed,
+        'processingFailed': processingFailed,
+    }
 
-    def __init__(self, app):
+    def __init__(self, app, **callbacks):
         Resource.__init__(self)
         self._app = app
 
+        for name, default in self.acceptedCallbacks.items():
+            setattr(self, name, callbacks.pop(name, default))
+        if callbacks:
+            raise TypeError("'%s' is an invalid keyword argument for this function" % name)
+
 
     def render(self, request):
+        self.requestStarted(request)
+
         # Stuff we need to know for the mapper.
         server_name = request.getRequestHostname()
         server_port = request.getHost().port
@@ -58,9 +86,9 @@ class KleinResource(Resource):
         try:
             (rule, kwargs) = mapper.match(return_rule=True)
             endpoint = rule.endpoint
-        except HTTPException as he:
-            request.setResponseCode(he.code)
-            return he.get_body({})
+            self.routingCompleted(rule.rule, request)
+        except HTTPException:
+            return self.routingFailed(Failure(), request)
 
         handler = self._app.endpoints[endpoint]
 
@@ -68,6 +96,12 @@ class KleinResource(Resource):
         # something renderable or printable. Return NOT_DONE_YET and set up
         # the incremental renderer.
         d = defer.maybeDeferred(handler, request, **kwargs)
+        request.notifyFinish().addCallbacks(
+                self.requestCompleted,
+                self.requestFailed,
+                callbackArgs=(request, ),
+                errbackArgs=(request, d))
+
 
         def process(r):
             if IResource.providedBy(r):
@@ -89,5 +123,5 @@ class KleinResource(Resource):
             request.finish()
 
         d.addCallback(process)
-        d.addErrback(request.processingFailed)
+        d.addErrback(self.processingFailed, request)
         return server.NOT_DONE_YET

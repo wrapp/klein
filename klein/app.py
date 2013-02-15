@@ -66,14 +66,14 @@ class Klein(object):
         return self._endpoints
 
 
-    def resource(self):
+    def resource(self, **kwargs):
         """
         Return an L{IResource} which suitably wraps this app.
 
         @returns: An L{IResource}
         """
 
-        return KleinResource(self)
+        return KleinResource(self, **kwargs)
 
 
     def route(self, url, *args, **kwargs):
